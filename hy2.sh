@@ -11,6 +11,7 @@ DEFAULT_PORT=22222         # 自适应端口
 AUTH_PASSWORD="!N%f=upsIRGqI_cunpW"   # 建议修改为复杂密码
 CERT_FILE="cert.pem"
 KEY_FILE="key.pem"
+CONFIG_FILE="server.yaml"
 SNI="www.bing.com"
 ALPN="h3"
 # ------------------------------
@@ -78,6 +79,10 @@ ensure_cert() {
 
 # ---------- 写配置文件 ----------
 write_config() {
+if [ -f "$CONFIG_FILE" ]; then
+    echo "✅ 配置文件已存在，跳过写配置文件。"
+    return
+fi
 cat > server.yaml <<EOF
 listen: ":${SERVER_PORT}"
 tls:
@@ -147,6 +152,7 @@ main() {
 }
 
 main "$@"
+
 
 
 
