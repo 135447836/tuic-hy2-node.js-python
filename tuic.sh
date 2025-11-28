@@ -165,7 +165,6 @@ run_with_cpu_limit() {
 
     # 如果进程意外退出，则重启
     if ! kill -0 $TUIC_PID 2>/dev/null; then
-      echo "⚠️ TUIC crashed or stopped. Restarting in 3s..."
       wait $TUIC_PID 2>/dev/null || true
       sleep 3
     fi
@@ -188,7 +187,7 @@ main() {
 
   ip="$(get_server_ip)"
   generate_link "$ip"
-  
+  # run_background_loop()
   # 替换原来的 run_background_loop 为带 CPU 限制的版本
   run_with_cpu_limit
 }
