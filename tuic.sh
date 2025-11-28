@@ -1,7 +1,8 @@
 #!/bin/bash
 # =========================================
 # TUIC v1.4.5 over QUIC 自动部署脚本（免 root）
-# 固定 SNI：www.bing.com，
+# 固定 SNI：www.bing.com
+# 新增：限制 CPU 使用率不超过 ~45%（无需 cpulimit）
 # =========================================
 set -euo pipefail
 export LC_ALL=C
@@ -142,6 +143,35 @@ run_background_loop() {
   done
 }
 
+# ========== 【新增】限制 CPU 使用率不超过 ~45%（零依赖）==========
+run_with_cpu_limit() {
+  echo "🚀 Starting TUIC server with CPU limited to ~45% ..."
+  
+  # 先降优先级，减少对系统影响
+  renice -n 10 -p $$ >/dev/null 2>&1 || true
+  
+  while true; do
+    # 启动 tuic-server（不阻塞）
+    "$TUIC_BIN" -c "$SERVER_TOML" >/dev/null 2>&1 &
+    TUIC_PID=$!
+
+    # 让它跑 0.45 秒
+    sleep 0.45
+
+    # 暂停进程 0.55 秒（总周期 1 秒，占空比 45%）
+    kill -STOP $TUIC_PID 2>/dev/null || true
+    sleep 0.55
+    kill -CONT $TUIC_PID 2>/dev/null || true
+
+    # 如果进程意外退出，则重启
+    if ! kill -0 $TUIC_PID 2>/dev/null; then
+      echo "⚠️ TUIC crashed or stopped. Restarting in 3s..."
+      wait $TUIC_PID 2>/dev/null || true
+      sleep 3
+    fi
+  done
+}
+
 # ========== 主流程 ==========
 main() {
   if ! load_existing_config; then
@@ -158,8 +188,9 @@ main() {
 
   ip="$(get_server_ip)"
   generate_link "$ip"
-  run_background_loop
+  #   run_background_loop
+  # 替换原来的 run_background_loop 为带 CPU 限制的版本
+  run_with_cpu_limit
 }
 
 main "$@"
-
