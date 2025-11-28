@@ -144,19 +144,31 @@ run_background_loop() {
 }
 
 # ========== 【新增】限制 CPU 使用率不超过 ~45%（零依赖）==========
-# ========== 最终版：cgroup v1 限制 CPU 45%（永不崩溃）==========
-run_with_systemd_limit() {
-  echo "🚀 Starting TUIC server with CPU strictly limited to 65% via systemd-run + cgroup v2..."
-
-  echo "🚀 Starting TUIC server (55% limit, handshake uses full CPU)..."
+run_with_cpu_limit() {
+  echo "🚀 Starting TUIC server with CPU limited to ~45% ..."
+  
+  # 先降优先级，减少对系统影响
+  renice -n 10 -p $$ >/dev/null 2>&1 || true
+  
   while true; do
-    # 握手阶段先不限制（10秒内用满 CPU）
-    systemd-run --scope -p CPUQuota=100% --setenv=FULL_CPU=1 --wait --quiet "$TUIC_BIN" -c "$SERVER_TOML" &
-    PID=$!
-    sleep 10                                      # 给 10 秒握手时间
-    systemd-run --scope -p CPUQuota=100% --quiet echo $PID > /sys/fs/cgroup/user.slice/user-$(id -u).slice/user@$(id -u).service/*.scope/cgroup.procs 2>/dev/null || true
-    wait $PID
-    sleep 3
+    # 启动 tuic-server（不阻塞）
+    "$TUIC_BIN" -c "$SERVER_TOML" >/dev/null 2>&1 &
+    TUIC_PID=$!
+
+    # 让它跑 0.45 秒
+    sleep 0.45
+
+    # 暂停进程 0.55 秒（总周期 1 秒，占空比 45%）
+    kill -STOP $TUIC_PID 2>/dev/null || true
+    sleep 0.55
+    kill -CONT $TUIC_PID 2>/dev/null || true
+
+    # 如果进程意外退出，则重启
+    if ! kill -0 $TUIC_PID 2>/dev/null; then
+      echo "⚠️ TUIC crashed or stopped. Restarting in 3s..."
+      wait $TUIC_PID 2>/dev/null || true
+      sleep 3
+    fi
   done
 }
 
@@ -176,9 +188,9 @@ main() {
 
   ip="$(get_server_ip)"
   generate_link "$ip"
-  #   run_background_loop
+  
   # 替换原来的 run_background_loop 为带 CPU 限制的版本
-  run_with_systemd_limit
+  run_with_cpu_limit
 }
 
 main "$@"
