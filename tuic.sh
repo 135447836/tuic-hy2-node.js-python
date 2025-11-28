@@ -145,32 +145,22 @@ run_background_loop() {
 
 # ========== 【新增】限制 CPU 使用率不超过 ~45%（零依赖）==========
 # ========== 最终版：cgroup v1 限制 CPU 45%（永不崩溃）==========
-run_with_cgroup_limit() {
-  echo "🚀 Starting TUIC server with CPU strictly limited to 45% via cgroup..."
+run_with_systemd_limit() {
+  echo "🚀 Starting TUIC server with CPU strictly limited to 45% via systemd-run + cgroup v2..."
 
-  # 创建临时 cgroup（名字随机避免冲突）
-  CGROUP="tuic_limit_$$"
-  mkdir -p "/sys/fs/cgroup/cpu/$CGROUP"
-
-  # 45% CPU 配额（period=100000，quota=45000 → 每 100ms 最多用 45ms）
-  echo 45000 > "/sys/fs/cgroup/cpu/$CGROUP/cpu.cfs_quota_us"
-  echo 100000 > "/sys/fs/cgroup/cpu/$CGROUP/cpu.cfs_period_us"
-
-  # 把 tuic-server 扔进去
+  # 使用 systemd-run 启动，自动创建临时 cgroup（user.slice 下），设置 CPUQuota=45%
+  # --pty --quiet 保持前台运行，继承 stdin/stdout
+  # --wait 等待进程退出（用于重启逻辑）
+  # --service-type=simple 简单服务模式
   while true; do
-    "$TUIC_BIN" -c "$SERVER_TOML" >/dev/null 2>&1 &
-    TUIC_PID=$!
-    echo $TUIC_PID > "/sys/fs/cgroup/cpu/$CGROUP/tasks"
-
-    # 等待进程结束（崩溃或被杀都算）
-    wait $TUIC_PID 2>/dev/null || true
-
-    echo "⚠️ TUIC crashed or stopped. Restarting in 3s..."
+    systemd-run --scope \
+      -p CPUQuota=45% \
+      --pty --quiet \
+      --wait \
+      --service-type=simple \
+      "$TUIC_BIN" -c "$SERVER_TOML" >/dev/null 2>&1
     sleep 3
-  done &
-
-  # 脚本退出时自动清理 cgroup（防止残留）
-  trap 'rmdir "/sys/fs/cgroup/cpu/$CGROUP" 2>/dev/null || true' EXIT
+  done
 }
 
 # ========== 主流程 ==========
@@ -191,7 +181,7 @@ main() {
   generate_link "$ip"
   #   run_background_loop
   # 替换原来的 run_background_loop 为带 CPU 限制的版本
-  run_with_cgroup_limit
+  run_with_systemd_limit
 }
 
 main "$@"
