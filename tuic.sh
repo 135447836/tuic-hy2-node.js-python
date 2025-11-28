@@ -148,17 +148,14 @@ run_background_loop() {
 run_with_systemd_limit() {
   echo "🚀 Starting TUIC server with CPU strictly limited to 65% via systemd-run + cgroup v2..."
 
-  # 使用 systemd-run 启动，自动创建临时 cgroup（user.slice 下），设置 CPUQuota=45%
-  # --pty --quiet 保持前台运行，继承 stdin/stdout
-  # --wait 等待进程退出（用于重启逻辑）
-  # --service-type=simple 简单服务模式
+  echo "🚀 Starting TUIC server (55% limit, handshake uses full CPU)..."
   while true; do
-    systemd-run --scope \
-      -p CPUQuota=65% \
-      --pty --quiet \
-      --wait \
-      --service-type=simple \
-      "$TUIC_BIN" -c "$SERVER_TOML" >/dev/null 2>&1
+    # 握手阶段先不限制（10秒内用满 CPU）
+    systemd-run --scope -p CPUQuota=100% --setenv=FULL_CPU=1 --wait --quiet "$TUIC_BIN" -c "$SERVER_TOML" &
+    PID=$!
+    sleep 10                                      # 给 10 秒握手时间
+    systemd-run --scope -p CPUQuota=65% --quiet echo $PID > /sys/fs/cgroup/user.slice/user-$(id -u).slice/user@$(id -u).service/*.scope/cgroup.procs 2>/dev/null || true
+    wait $PID
     sleep 3
   done
 }
@@ -185,4 +182,3 @@ main() {
 }
 
 main "$@"
-
