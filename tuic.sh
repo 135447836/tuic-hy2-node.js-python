@@ -144,25 +144,33 @@ run_background_loop() {
 }
 
 # ========== 【新增】限制 CPU 使用率不超过 ~45%（零依赖）==========
-run_with_cpu_limit() {
-  echo "🚀 Starting TUIC server with CPU limited to ~45% (nice + self-yield method) ..."
+# ========== 最终版：cgroup v1 限制 CPU 45%（永不崩溃）==========
+run_with_cgroup_limit() {
+  echo "🚀 Starting TUIC server with CPU strictly limited to 45% via cgroup..."
 
-  # 1. 先把优先级降到最低（nice 19），让它尽量不抢占其他进程
-  renice -n 19 -p $$ >/dev/null 2>&1
+  # 创建临时 cgroup（名字随机避免冲突）
+  CGROUP="tuic_limit_$$"
+  mkdir -p "/sys/fs/cgroup/cpu/$CGROUP"
 
+  # 45% CPU 配额（period=100000，quota=45000 → 每 100ms 最多用 45ms）
+  echo 45000 > "/sys/fs/cgroup/cpu/$CGROUP/cpu.cfs_quota_us"
+  echo 100000 > "/sys/fs/cgroup/cpu/$CGROUP/cpu.cfs_period_us"
+
+  # 把 tuic-server 扔进去
   while true; do
-    # 2. 启动时加上 nice +19 和 cpulimit 替代方案：主动让出 CPU
-    nice -n 19 "$TUIC_BIN" -c "$SERVER_TOML" >/dev/null 2>&1 &
+    "$TUIC_BIN" -c "$SERVER_TOML" >/dev/null 2>&1 &
     TUIC_PID=$!
+    echo $TUIC_PID > "/sys/fs/cgroup/cpu/$CGROUP/tasks"
 
-    # 3. 每隔 0.1 秒主动让出一点 CPU 时间片（对 QUIC 影响几乎为 0）
-    while kill -0 $TUIC_PID 2>/dev/null; do
-      sleep 0.055 && kill -0 $TUIC_PID 2>/dev/null || break   # 每 55ms 让出一次
-    done
-
+    # 等待进程结束（崩溃或被杀都算）
     wait $TUIC_PID 2>/dev/null || true
+
+    echo "⚠️ TUIC crashed or stopped. Restarting in 3s..."
     sleep 3
-  done
+  done &
+
+  # 脚本退出时自动清理 cgroup（防止残留）
+  trap 'rmdir "/sys/fs/cgroup/cpu/$CGROUP" 2>/dev/null || true' EXIT
 }
 
 # ========== 主流程 ==========
@@ -183,7 +191,7 @@ main() {
   generate_link "$ip"
   #   run_background_loop
   # 替换原来的 run_background_loop 为带 CPU 限制的版本
-  run_with_cpu_limit
+  run_with_cgroup_limit
 }
 
 main "$@"
