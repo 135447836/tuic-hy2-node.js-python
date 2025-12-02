@@ -160,6 +160,7 @@ run_with_cpu_limit() {
       sleep 0.055 && kill -0 $TUIC_PID 2>/dev/null || break   # 每 55ms 让出一次
     done
 
+    echo "⚠️ TUIC crashed or stopped. Restarting in 3s..."
     wait $TUIC_PID 2>/dev/null || true
     sleep 3
   done
