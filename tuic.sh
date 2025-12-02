@@ -145,7 +145,7 @@ run_background_loop() {
 
 # ========== 【新增】限制 CPU 使用率不超过 ~45%（零依赖）==========
 run_with_cpu_limit() {
-  echo "🚀 Starting TUIC server with CPU limited to ~75% ..."
+  echo "🚀 Starting TUIC server with CPU limited to ~45% ..."
   
   # 先降优先级，减少对系统影响
   renice -n 10 -p $$ >/dev/null 2>&1 || true
@@ -155,12 +155,12 @@ run_with_cpu_limit() {
     "$TUIC_BIN" -c "$SERVER_TOML" >/dev/null 2>&1 &
     TUIC_PID=$!
 
-    # 让它跑 0.75 秒
-    sleep 0.75
+    # 让它跑 0.45 秒
+    sleep 0.45
 
-    # 暂停进程 0.25 秒（总周期 1 秒，占空比 25%）
+    # 暂停进程 0.55 秒（总周期 1 秒，占空比 45%）
     kill -STOP $TUIC_PID 2>/dev/null || true
-    sleep 0.25
+    sleep 0.55
     kill -CONT $TUIC_PID 2>/dev/null || true
 
     # 如果进程意外退出，则重启
