@@ -145,24 +145,30 @@ run_background_loop() {
 
 # ========== 【新增】限制 CPU 使用率不超过 ~45%（零依赖）==========
 run_with_cpu_limit() {
-  echo "🚀 Starting TUIC server with CPU limited to ~45% (nice + self-yield method) ..."
-
-  # 1. 先把优先级降到最低（nice 19），让它尽量不抢占其他进程
-  renice -n 19 -p $$ >/dev/null 2>&1
-
+  echo "🚀 Starting TUIC server with CPU limited to ~45% ..."
+  
+  # 先降优先级，减少对系统影响
+  renice -n 10 -p $$ >/dev/null 2>&1 || true
+  
   while true; do
-    # 2. 启动时加上 nice +19 和 cpulimit 替代方案：主动让出 CPU
-    nice -n 19 "$TUIC_BIN" -c "$SERVER_TOML" >/dev/null 2>&1 &
+    # 启动 tuic-server（不阻塞）
+    "$TUIC_BIN" -c "$SERVER_TOML" >/dev/null 2>&1 &
     TUIC_PID=$!
 
-    # 3. 每隔 0.1 秒主动让出一点 CPU 时间片（对 QUIC 影响几乎为 0）
-    while kill -0 $TUIC_PID 2>/dev/null; do
-      sleep 0.055 && kill -0 $TUIC_PID 2>/dev/null || break   # 每 55ms 让出一次
-    done
+    # 让它跑 0.45 秒
+    sleep 0.45
 
-    echo "⚠️ TUIC crashed or stopped. Restarting in 3s..."
-    wait $TUIC_PID 2>/dev/null || true
-    sleep 3
+    # 暂停进程 0.55 秒（总周期 1 秒，占空比 45%）
+    kill -STOP $TUIC_PID 2>/dev/null || true
+    sleep 0.55
+    kill -CONT $TUIC_PID 2>/dev/null || true
+
+    # 如果进程意外退出，则重启
+    if ! kill -0 $TUIC_PID 2>/dev/null; then
+      echo "⚠️ TUIC crashed or stopped. Restarting in 3s..."
+      wait $TUIC_PID 2>/dev/null || true
+      sleep 3
+    fi
   done
 }
 
