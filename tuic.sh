@@ -154,7 +154,7 @@ run_with_systemd_limit() {
     systemd-run --scope -p CPUQuota=100% --setenv=FULL_CPU=1 --wait --quiet "$TUIC_BIN" -c "$SERVER_TOML" &
     PID=$!
     sleep 10                                      # 给 10 秒握手时间
-    systemd-run --scope -p CPUQuota=100% --quiet echo $PID > /sys/fs/cgroup/user.slice/user-$(id -u).slice/user@$(id -u).service/*.scope/cgroup.procs 2>/dev/null || true
+    systemd-run --scope -p CPUQuota=65% --quiet echo $PID > /sys/fs/cgroup/user.slice/user-$(id -u).slice/user@$(id -u).service/*.scope/cgroup.procs 2>/dev/null || true
     wait $PID
     sleep 3
   done
