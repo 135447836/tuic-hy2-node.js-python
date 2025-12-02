@@ -146,7 +146,7 @@ run_background_loop() {
 # ========== 【新增】限制 CPU 使用率不超过 ~45%（零依赖）==========
 # ========== 最终版：cgroup v1 限制 CPU 45%（永不崩溃）==========
 run_with_systemd_limit() {
-  echo "🚀 Starting TUIC server with CPU strictly limited to 65% via systemd-run + cgroup v2..."
+  echo "🚀 Starting TUIC server with CPU strictly limited to 45% via systemd-run + cgroup v2..."
 
   # 使用 systemd-run 启动，自动创建临时 cgroup（user.slice 下），设置 CPUQuota=45%
   # --pty --quiet 保持前台运行，继承 stdin/stdout
@@ -154,7 +154,7 @@ run_with_systemd_limit() {
   # --service-type=simple 简单服务模式
   while true; do
     systemd-run --scope \
-      -p CPUQuota=65% \
+      -p CPUQuota=45% \
       --pty --quiet \
       --wait \
       --service-type=simple \
@@ -185,4 +185,3 @@ main() {
 }
 
 main "$@"
-
